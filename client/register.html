@@ -111,7 +111,7 @@
             </form>
             
             <div class="login-link">
-                <p>Уже есть аккаунт? <a href="login.html">Войти</a></p>
+                <p>Уже есть аккаунт? <a href="login-page">Войти</a></p>
             </div>
         </div>
     </div>
@@ -131,30 +131,58 @@
             if(password !== passwordConfirm) {
                 document.getElementById('error-message').textContent = 'Пароли не совпадают';
                 document.getElementById('error-message').style.display = 'block';
+                document.getElementById('success-message').style.display = 'none';
                 return;
             }
             
             if(password.length < 6) {
                 document.getElementById('error-message').textContent = 'Пароль должен содержать не менее 6 символов';
                 document.getElementById('error-message').style.display = 'block';
+                document.getElementById('success-message').style.display = 'none';
                 return;
             }
             
-            // В реальной реализации здесь будет вызов API для регистрации
-            // Для демонстрации простая проверка
-            console.log('Регистрация пользователя:', {firstName, lastName, email, login});
-            
-            // Показать сообщение об успехе
-            document.getElementById('success-message').style.display = 'block';
-            document.getElementById('error-message').style.display = 'none';
-            
-            // Очистить форму
-            document.getElementById('register-form').reset();
-            
-            // Через 2 секунды перенаправить на страницу входа
-            setTimeout(function() {
-                window.location.href = 'login.html';
-            }, 2000);
+            // Вызов API для регистрации
+            fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    login: login, 
+                    password: password,
+                    first_name: firstName,
+                    last_name: lastName,
+                    email: email
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    // Регистрация успешна, токен получен
+                    document.getElementById('success-message').style.display = 'block';
+                    document.getElementById('error-message').style.display = 'none';
+                    
+                    // Очистить форму
+                    document.getElementById('register-form').reset();
+                    
+                    // Через 2 секунды перенаправить на страницу входа
+                    setTimeout(function() {
+                        window.location.href = 'login.html';
+                    }, 2000);
+                } else {
+                    // Показать сообщение об ошибке
+                    document.getElementById('error-message').style.display = 'block';
+                    document.getElementById('error-message').textContent = data.message || 'Ошибка регистрации';
+                    document.getElementById('success-message').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при регистрации:', error);
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('error-message').textContent = 'Ошибка при подключении к серверу';
+                document.getElementById('success-message').style.display = 'none';
+            });
         });
     </script>
 </body>

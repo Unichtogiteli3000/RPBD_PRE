@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, render_template, send_from_directory
+from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,6 +12,9 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder='client', template_folder='client')
 CORS(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
+# Enable CORS for all routes
+CORS(app, supports_credentials=True)
 
 # Database connection configuration
 DB_CONFIG = {
@@ -803,6 +807,24 @@ def get_audit_log():
     finally:
         if 'conn' in locals():
             conn.close()
+
+# Serve static files (CSS, JS, images)
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory('client', filename)
+
+# Serve HTML files
+@app.route('/')
+def index():
+    return send_from_directory('client', 'index.html')
+
+@app.route('/login-page')
+def login_page():
+    return send_from_directory('client', 'login.html')
+
+@app.route('/register-page')
+def register_page():
+    return send_from_directory('client', 'register.html')
 
 # Health check endpoint
 @app.route('/api/health', methods=['GET'])
