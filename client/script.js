@@ -24,42 +24,49 @@ function initializeApp() {
     loadInitialData();
 }
 
+// Обработка входа
+document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const login = document.getElementById('login').value;
+  const password = document.getElementById(' password').value;
+
+  try {
+    const res = await fetch('http://localhost:5000/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      // Сохраняем токен и данные пользователя
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = 'index.html'; // Переход в личный кабинет
+    } else {
+      alert(data.message || 'Ошибка входа');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Ошибка подключения к серверу');
+  }
+});
+
 // Проверка сессии пользователя
 function checkUserSession() {
-    // В реальной системе здесь будет проверка токена в localStorage или cookies
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-        // В реальной системе нужно будет проверить валидность токена
-        // Пока что просто проверим, есть ли токен
-        fetch(`${API_BASE_URL}/profile`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => {
-            if (response.ok) {
-                return response.json();
-            } else {
-                throw new Error('Unauthorized');
-            }
-        })
-        .then(data => {
-            currentUser = data;
-            isAdmin = data.is_admin || false;
-            updateUserInfo();
-            toggleAdminPanel();
-        })
-        .catch(error => {
-            console.error('Ошибка при проверке сессии:', error);
-            // Если токен недействителен, очищаем его
-            localStorage.removeItem('auth_token');
-        });
-    } else {
-        // Перенаправляем на страницу входа, если нет токена
-        window.location.href = 'login.html';
-    }
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user'));
+
+  if (token && user) {
+    currentUser = user;
+    isAdmin = user.is_admin;
+    updateUserInfo();
+    toggleAdminPanel();
+  } else {
+    // Нет сессии → редирект на логин
+    window.location.href = 'login.html';
+  }
 }
 
 // Обновление информации о пользователе в интерфейсе
