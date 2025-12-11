@@ -21,23 +21,49 @@ function initializeApp() {
     loadInitialData();
 }
 
+// Обработка входа
+document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const login = document.getElementById('login').value;
+  const password = document.getElementById(' password').value;
+
+  try {
+    const res = await fetch('http://localhost:5000/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      // Сохраняем токен и данные пользователя
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = 'index.html'; // Переход в личный кабинет
+    } else {
+      alert(data.message || 'Ошибка входа');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Ошибка подключения к серверу');
+  }
+});
+
 // Проверка сессии пользователя
 function checkUserSession() {
-    // В реальной реализации здесь будет проверка сессии на сервере
-    // Для демонстрации устанавливаем тестового пользователя
-    currentUser = {
-        user_id: 1,
-        login: 'test_user',
-        first_name: 'Иван',
-        last_name: 'Петров',
-        email: 'ivan@example.com',
-        avatar_url: 'https://via.placeholder.com/150'
-    };
-    
-    isAdmin = false; // В реальной системе это будет определяться по роли пользователя
-    
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user'));
+
+  if (token && user) {
+    currentUser = user;
+    isAdmin = user.is_admin;
     updateUserInfo();
     toggleAdminPanel();
+  } else {
+    // Нет сессии → редирект на логин
+    window.location.href = 'login.html';
+  }
 }
 
 // Обновление информации о пользователе в интерфейсе

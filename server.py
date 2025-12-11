@@ -6,8 +6,10 @@ import os
 from datetime import datetime, timedelta
 import jwt
 from functools import wraps
+from flask_cors import CORS
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='client', template_folder='client')
+CORS(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
 # Database connection configuration
@@ -806,6 +808,18 @@ def get_audit_log():
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow()}), 200
+
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
+@app.route('/login')
+def login_page():
+    return app.send_static_file('login.html')
+
+@app.route('/register')
+def register_page():
+    return app.send_static_file('register.html')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
