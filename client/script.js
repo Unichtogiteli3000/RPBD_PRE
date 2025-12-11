@@ -4,6 +4,9 @@ let isAdmin = false;
 let allGenres = [];
 let userArtists = [];
 
+// Базовый URL для API
+const API_BASE_URL = '/api';
+
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
@@ -23,27 +26,46 @@ function initializeApp() {
 
 // Проверка сессии пользователя
 function checkUserSession() {
-    // В реальной реализации здесь будет проверка сессии на сервере
-    // Для демонстрации устанавливаем тестового пользователя
-    currentUser = {
-        user_id: 1,
-        login: 'test_user',
-        first_name: 'Иван',
-        last_name: 'Петров',
-        email: 'ivan@example.com',
-        avatar_url: 'https://via.placeholder.com/150'
-    };
-    
-    isAdmin = false; // В реальной системе это будет определяться по роли пользователя
-    
-    updateUserInfo();
-    toggleAdminPanel();
+    // В реальной системе здесь будет проверка токена в localStorage или cookies
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+        // В реальной системе нужно будет проверить валидность токена
+        // Пока что просто проверим, есть ли токен
+        fetch(`${API_BASE_URL}/profile`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            } else {
+                throw new Error('Unauthorized');
+            }
+        })
+        .then(data => {
+            currentUser = data;
+            isAdmin = data.is_admin || false;
+            updateUserInfo();
+            toggleAdminPanel();
+        })
+        .catch(error => {
+            console.error('Ошибка при проверке сессии:', error);
+            // Если токен недействителен, очищаем его
+            localStorage.removeItem('auth_token');
+        });
+    } else {
+        // Перенаправляем на страницу входа, если нет токена
+        window.location.href = 'login.html';
+    }
 }
 
 // Обновление информации о пользователе в интерфейсе
 function updateUserInfo() {
     if (currentUser) {
-        document.getElementById('username').textContent = `${currentUser.first_name} ${currentUser.last_name}`;
+        document.getElementById('username').textContent = `${currentUser.first_name || currentUser.login} ${currentUser.last_name || ''}`.trim();
         document.getElementById('avatar-img').src = currentUser.avatar_url || 'https://via.placeholder.com/150';
         document.getElementById('first-name').value = currentUser.first_name || '';
         document.getElementById('last-name').value = currentUser.last_name || '';
@@ -114,33 +136,85 @@ function saveArtist(e) {
     if (!name) return;
 
     const artistId = document.getElementById('artist-id')?.value;
+    const token = localStorage.getItem('auth_token');
 
     if (artistId) {
         // Редактирование
-        const index = userArtists.findIndex(a => a.artist_id == artistId);
-        if (index !== -1) {
-            userArtists[index].name = name;
-        }
+        fetch(`${API_BASE_URL}/artists/${artistId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                closeModal();
+                loadUserArtists(); // Обновить таблицу
+                showMessage('Исполнитель успешно обновлен!', 'success');
+            } else {
+                showMessage('Ошибка при обновлении исполнителя', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            showMessage('Ошибка при обновлении исполнителя', 'error');
+        });
     } else {
         // Добавление
-        const newId = userArtists.length > 0 ? Math.max(...userArtists.map(a => a.artist_id)) + 1 : 1;
-        userArtists.push({ artist_id: newId, name });
+        fetch(`${API_BASE_URL}/artists`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.artist_id) {
+                closeModal();
+                loadUserArtists(); // Обновить таблицу
+                showMessage('Исполнитель успешно добавлен!', 'success');
+            } else {
+                showMessage('Ошибка при добавлении исполнителя', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            showMessage('Ошибка при добавлении исполнителя', 'error');
+        });
     }
-
-    // Сохранить в localStorage
-    localStorage.setItem('userArtists', JSON.stringify(userArtists));
-
-    closeModal();
-    loadUserArtists(); // Обновить таблицу
 }
 
 // Удаление автора
 function deleteArtist(artistId) {
     if (!confirm('Удалить этого автора? Это может повлиять на треки!')) return;
 
-    userArtists = userArtists.filter(a => a.artist_id !== artistId);
-    localStorage.setItem('userArtists', JSON.stringify(userArtists));
-    loadUserArtists();
+    const token = localStorage.getItem('auth_token');
+
+    fetch(`${API_BASE_URL}/artists/${artistId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            loadUserArtists(); // Обновить таблицу
+            showMessage('Исполнитель успешно удален!', 'success');
+        } else {
+            showMessage('Ошибка при удалении исполнителя', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при удалении исполнителя', 'error');
+    });
 }
 
 // Настройка обработчиков событий
@@ -231,40 +305,48 @@ function showSection(sectionId) {
 // Загрузка начальных данных
 function loadInitialData() {
     loadGenres();
-    loadArtists();
+    loadUserArtists();
 }
 
 // Загрузка жанров
 function loadGenres() {
-    // В реальной реализации будет вызов API
-    // Для демонстрации используем тестовые данные
-    allGenres = [
-        { genre_id: 1, name: 'Рок' },
-        { genre_id: 2, name: 'Поп' },
-        { genre_id: 3, name: 'Джаз' },
-        { genre_id: 4, name: 'Хип-хоп' },
-        { genre_id: 5, name: 'Электроника' },
-        { genre_id: 6, name: 'Классика' }
-    ];
+    const token = localStorage.getItem('auth_token');
+    
+    fetch(`${API_BASE_URL}/genres`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        allGenres = data;
+    })
+    .catch(error => {
+        console.error('Ошибка при загрузке жанров:', error);
+    });
 }
-
 
 // Загрузка авторов пользователя
 function loadUserArtists() {
-    // В реальной реализации — вызов API
-    // Для демо — сохраняем в памяти браузера или просто используем массив
-    if (localStorage.getItem('userArtists')) {
-        userArtists = JSON.parse(localStorage.getItem('userArtists'));
-    } else {
-        // Начальные данные (можно убрать после отладки)
-        userArtists = [
-            { artist_id: 1, name: 'The Beatles' },
-            { artist_id: 2, name: 'Michael Jackson' },
-            { artist_id: 3, name: 'Eminem' }
-        ];
-        localStorage.setItem('userArtists', JSON.stringify(userArtists));
-    }
-    displayArtists(userArtists);
+    const token = localStorage.getItem('auth_token');
+    
+    fetch(`${API_BASE_URL}/artists`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        userArtists = data;
+        displayArtists(userArtists);
+    })
+    .catch(error => {
+        console.error('Ошибка при загрузке авторов:', error);
+    });
 }
 
 //отображение авторов
@@ -299,12 +381,13 @@ function loadGenresForSearch() {
 
 // Выход из системы
 function logout() {
-    // В реальной реализации будет вызов API для завершения сессии
+    // Очистить токен
+    localStorage.removeItem('auth_token');
     currentUser = null;
     isAdmin = false;
     
-    // Перенаправление на страницу входа или обновление страницы
-    window.location.href = 'login.html'; // или просто window.location.reload();
+    // Перенаправление на страницу входа
+    window.location.href = 'login-page';
 }
 
 // Сохранение профиля
@@ -312,19 +395,38 @@ function saveProfile(e) {
     e.preventDefault();
     
     const profileData = {
-        user_id: currentUser.user_id,
         first_name: document.getElementById('first-name').value,
         last_name: document.getElementById('last-name').value,
         email: document.getElementById('email').value
     };
     
-    // В реальной реализации будет вызов API
-    // Для демонстрации просто обновим данные
-    currentUser = { ...currentUser, ...profileData };
-    updateUserInfo();
+    const token = localStorage.getItem('auth_token');
     
-    // Показать сообщение об успехе
-    alert('Профиль успешно сохранен!');
+    fetch(`${API_BASE_URL}/profile`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(profileData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            // Обновляем информацию о пользователе
+            currentUser.first_name = profileData.first_name;
+            currentUser.last_name = profileData.last_name;
+            currentUser.email = profileData.email;
+            updateUserInfo();
+            showMessage('Профиль успешно сохранен!', 'success');
+        } else {
+            showMessage('Ошибка при сохранении профиля', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при сохранении профиля', 'error');
+    });
 }
 
 // Смена аватара
@@ -335,39 +437,22 @@ function changeAvatar() {
 
 // Загрузка треков пользователя
 function loadUserTracks() {
-    // В реальной реализации будет вызов API
-    // Для демонстрации используем тестовые данные
-    const tracks = [
-        {
-            track_id: 1,
-            title: 'Bohemian Rhapsody',
-            artist_name: 'Queen',
-            genre_name: 'Рок',
-            bpm: 70,
-            duration_sec: 355,
-            created_at: '2023-05-15 10:30:00'
-        },
-        {
-            track_id: 2,
-            title: 'Billie Jean',
-            artist_name: 'Michael Jackson',
-            genre_name: 'Поп',
-            bpm: 117,
-            duration_sec: 294,
-            created_at: '2023-06-20 14:22:00'
-        },
-        {
-            track_id: 3,
-            title: 'So What',
-            artist_name: 'Miles Davis',
-            genre_name: 'Джаз',
-            bpm: 68,
-            duration_sec: 564,
-            created_at: '2023-07-10 09:15:00'
-        }
-    ];
+    const token = localStorage.getItem('auth_token');
     
-    displayTracks(tracks);
+    fetch(`${API_BASE_URL}/tracks`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        displayTracks(data);
+    })
+    .catch(error => {
+        console.error('Ошибка при загрузке треков:', error);
+    });
 }
 
 // Отображение треков в таблице
@@ -420,7 +505,7 @@ function showAddTrackModal() {
                 <label for="track-artist">Исполнитель:</label>
                 <select id="track-artist" required>
                     <option value="">Выберите исполнителя</option>
-                    ${allArtists.map(artist => `<option value="${artist.artist_id}">${artist.name}</option>`).join('')}
+                    ${userArtists.map(artist => `<option value="${artist.artist_id}">${artist.name}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
@@ -453,62 +538,68 @@ function showAddTrackModal() {
 
 // Показать модальное окно редактирования трека
 function showEditTrackModal(trackId) {
-    // В реальной реализации будет загрузка данных трека
-    // Для демонстрации используем тестовые данные
-    const track = {
-        track_id: trackId,
-        title: 'Название трека',
-        artist_id: 1,
-        genre_id: 1,
-        bpm: 120,
-        duration_sec: 180
-    };
+    const token = localStorage.getItem('auth_token');
     
-    const modalBody = document.getElementById('modal-body');
-    modalBody.innerHTML = `
-        <form id="track-form">
-            <input type="hidden" id="track-id" value="${track.track_id}">
-            <div class="form-group">
-                <label for="track-title">Название:</label>
-                <input type="text" id="track-title" value="${track.title}" required>
-            </div>
-            <div class="form-group">
-                <label for="track-artist">Исполнитель:</label>
-                <select id="track-artist" required>
-                    <option value="">Выберите исполнителя</option>
-                    ${allArtists.map(artist => 
-                        `<option value="${artist.artist_id}" ${artist.artist_id === track.artist_id ? 'selected' : ''}>${artist.name}</option>`
-                    ).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="track-genre">Жанр:</label>
-                <select id="track-genre" required>
-                    <option value="">Выберите жанр</option>
-                    ${allGenres.map(genre => 
-                        `<option value="${genre.genre_id}" ${genre.genre_id === track.genre_id ? 'selected' : ''}>${genre.name}</option>`
-                    ).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="track-bpm">BPM:</label>
-                <input type="number" id="track-bpm" value="${track.bpm}" min="0">
-            </div>
-            <div class="form-group">
-                <label for="track-duration">Длительность (сек):</label>
-                <input type="number" id="track-duration" value="${track.duration_sec}" min="0">
-            </div>
-            <div class="form-group">
-                <button type="submit" class="btn btn-primary">Сохранить</button>
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
-            </div>
-        </form>
-    `;
-    
-    document.getElementById('modal-title').textContent = 'Редактировать трек';
-    document.getElementById('track-form').addEventListener('submit', saveTrack);
-    
-    showModal();
+    // Загружаем данные трека
+    fetch(`${API_BASE_URL}/tracks/${trackId}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(track => {
+        const modalBody = document.getElementById('modal-body');
+        modalBody.innerHTML = `
+            <form id="track-form">
+                <input type="hidden" id="track-id" value="${track.track_id}">
+                <div class="form-group">
+                    <label for="track-title">Название:</label>
+                    <input type="text" id="track-title" value="${track.title}" required>
+                </div>
+                <div class="form-group">
+                    <label for="track-artist">Исполнитель:</label>
+                    <select id="track-artist" required>
+                        <option value="">Выберите исполнителя</option>
+                        ${userArtists.map(artist => 
+                            `<option value="${artist.artist_id}" ${artist.artist_id === track.artist_id ? 'selected' : ''}>${artist.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="track-genre">Жанр:</label>
+                    <select id="track-genre" required>
+                        <option value="">Выберите жанр</option>
+                        ${allGenres.map(genre => 
+                            `<option value="${genre.genre_id}" ${genre.genre_id === track.genre_id ? 'selected' : ''}>${genre.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="track-bpm">BPM:</label>
+                    <input type="number" id="track-bpm" value="${track.bpm || ''}" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="track-duration">Длительность (сек):</label>
+                    <input type="number" id="track-duration" value="${track.duration_sec || ''}" min="0">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                </div>
+            </form>
+        `;
+        
+        document.getElementById('modal-title').textContent = 'Редактировать трек';
+        document.getElementById('track-form').addEventListener('submit', saveTrack);
+        
+        showModal();
+    })
+    .catch(error => {
+        console.error('Ошибка при загрузке трека:', error);
+        showMessage('Ошибка при загрузке данных трека', 'error');
+    });
 }
 
 // Сохранение трека
@@ -516,58 +607,97 @@ function saveTrack(e) {
     e.preventDefault();
     
     const trackData = {
-        track_id: document.getElementById('track-id') ? parseInt(document.getElementById('track-id').value) : null,
         title: document.getElementById('track-title').value,
         artist_id: parseInt(document.getElementById('track-artist').value),
         genre_id: parseInt(document.getElementById('track-genre').value),
         bpm: parseInt(document.getElementById('track-bpm').value) || null,
-        duration_sec: parseInt(document.getElementById('track-duration').value) || null,
-        user_id: currentUser.user_id
+        duration_sec: parseInt(document.getElementById('track-duration').value) || null
     };
     
-    // В реальной реализации будет вызов API
-    console.log('Сохранение трека:', trackData);
+    const trackId = document.getElementById('track-id') ? parseInt(document.getElementById('track-id').value) : null;
+    const token = localStorage.getItem('auth_token');
     
-    closeModal();
-    loadUserTracks(); // Обновить список треков
+    let url, method;
+    if (trackId) {
+        // Редактирование
+        url = `${API_BASE_URL}/tracks/${trackId}`;
+        method = 'PUT';
+    } else {
+        // Добавление
+        url = `${API_BASE_URL}/tracks`;
+        method = 'POST';
+    }
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(trackData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.track_id || data.message) {
+            closeModal();
+            loadUserTracks(); // Обновить список треков
+            showMessage(trackId ? 'Трек успешно обновлен!' : 'Трек успешно добавлен!', 'success');
+        } else {
+            showMessage('Ошибка при сохранении трека', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при сохранении трека', 'error');
+    });
 }
 
 // Удаление трека
 function deleteTrack(trackId) {
     if (confirm('Вы уверены, что хотите удалить этот трек?')) {
-        // В реальной реализации будет вызов API
-        console.log('Удаление трека:', trackId);
-        loadUserTracks(); // Обновить список треков
+        const token = localStorage.getItem('auth_token');
+        
+        fetch(`${API_BASE_URL}/tracks/${trackId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                loadUserTracks(); // Обновить список треков
+                showMessage('Трек успешно удален!', 'success');
+            } else {
+                showMessage('Ошибка при удалении трека', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            showMessage('Ошибка при удалении трека', 'error');
+        });
     }
 }
 
 // Загрузка коллекций пользователя
 function loadUserCollections() {
-    // В реальной реализации будет вызов API
-    // Для демонстрации используем тестовые данные
-    const collections = [
-        {
-            collection_id: 1,
-            name: 'Любимые треки',
-            is_favorite: true,
-            created_at: '2023-05-10 12:00:00',
-            tracks: [
-                { track_id: 1, title: 'Bohemian Rhapsody', artist_name: 'Queen' },
-                { track_id: 2, title: 'Billie Jean', artist_name: 'Michael Jackson' }
-            ]
-        },
-        {
-            collection_id: 2,
-            name: 'Рабочий плейлист',
-            is_favorite: false,
-            created_at: '2023-06-15 14:30:00',
-            tracks: [
-                { track_id: 3, title: 'So What', artist_name: 'Miles Davis' }
-            ]
-        }
-    ];
+    const token = localStorage.getItem('auth_token');
     
-    displayCollections(collections);
+    fetch(`${API_BASE_URL}/collections`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        displayCollections(data);
+    })
+    .catch(error => {
+        console.error('Ошибка при загрузке коллекций:', error);
+    });
 }
 
 // Отображение коллекций
@@ -591,11 +721,11 @@ function displayCollections(collections) {
             <div class="collection-tracks">
                 <h4>Треки в коллекции:</h4>
                 <ul>
-                    ${collection.tracks.map(track => 
+                    ${collection.tracks ? collection.tracks.map(track => 
                         `<li>${track.title} - ${track.artist_name} 
                            <button class="btn btn-secondary btn-sm" onclick="removeTrackFromCollection(${collection.collection_id}, ${track.track_id})">Удалить</button>
                            </li>`
-                    ).join('')}
+                    ).join('') : ''}
                 </ul>
                 <button class="btn btn-secondary" onclick="showAddTrackToCollectionModal(${collection.collection_id})">Добавить трек</button>
             </div>
@@ -639,29 +769,142 @@ function saveCollection(e) {
     
     const collectionData = {
         name: document.getElementById('collection-name').value,
-        is_favorite: document.getElementById('collection-favorite').checked,
-        user_id: currentUser.user_id
+        is_favorite: document.getElementById('collection-favorite').checked
     };
     
-    // В реальной реализации будет вызов API
-    console.log('Создание коллекции:', collectionData);
+    const token = localStorage.getItem('auth_token');
     
-    closeModal();
-    loadUserCollections(); // Обновить список коллекций
+    fetch(`${API_BASE_URL}/collections`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(collectionData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.collection_id) {
+            closeModal();
+            loadUserCollections(); // Обновить список коллекций
+            showMessage('Коллекция успешно создана!', 'success');
+        } else {
+            showMessage('Ошибка при создании коллекции', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при создании коллекции', 'error');
+    });
 }
 
 // Показать модальное окно редактирования коллекции
 function showEditCollectionModal(collectionId) {
-    // В реальной реализации будет загрузка данных коллекции
-    alert(`Редактирование коллекции с ID: ${collectionId}`);
+    const token = localStorage.getItem('auth_token');
+    
+    // Сначала получаем данные коллекции
+    fetch(`${API_BASE_URL}/collections/${collectionId}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(collection => {
+        const modalBody = document.getElementById('modal-body');
+        modalBody.innerHTML = `
+            <form id="collection-form">
+                <input type="hidden" id="collection-id" value="${collection.collection_id}">
+                <div class="form-group">
+                    <label for="collection-name">Название коллекции:</label>
+                    <input type="text" id="collection-name" value="${collection.name}" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="collection-favorite" ${collection.is_favorite ? 'checked' : ''}> 
+                        Сделать коллекцией "Любимые треки"
+                    </label>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                </div>
+            </form>
+        `;
+        
+        document.getElementById('modal-title').textContent = 'Редактировать коллекцию';
+        document.getElementById('collection-form').addEventListener('submit', updateCollection);
+        
+        showModal();
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при загрузке данных коллекции', 'error');
+    });
+}
+
+// Обновление коллекции
+function updateCollection(e) {
+    e.preventDefault();
+    
+    const collectionId = parseInt(document.getElementById('collection-id').value);
+    const collectionData = {
+        name: document.getElementById('collection-name').value,
+        is_favorite: document.getElementById('collection-favorite').checked
+    };
+    
+    const token = localStorage.getItem('auth_token');
+    
+    fetch(`${API_BASE_URL}/collections/${collectionId}`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(collectionData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            closeModal();
+            loadUserCollections(); // Обновить список коллекций
+            showMessage('Коллекция успешно обновлена!', 'success');
+        } else {
+            showMessage('Ошибка при обновлении коллекции', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при обновлении коллекции', 'error');
+    });
 }
 
 // Удаление коллекции
 function deleteCollection(collectionId) {
     if (confirm('Вы уверены, что хотите удалить эту коллекцию?')) {
-        // В реальной реализации будет вызов API
-        console.log('Удаление коллекции:', collectionId);
-        loadUserCollections(); // Обновить список коллекций
+        const token = localStorage.getItem('auth_token');
+        
+        fetch(`${API_BASE_URL}/collections/${collectionId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                loadUserCollections(); // Обновить список коллекций
+                showMessage('Коллекция успешно удалена!', 'success');
+            } else {
+                showMessage('Ошибка при удалении коллекции', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            showMessage('Ошибка при удалении коллекции', 'error');
+        });
     }
 }
 
@@ -673,30 +916,34 @@ function performSearch() {
     const bpm = document.getElementById('search-bpm').value;
     const duration = document.getElementById('search-duration').value;
     
-    // В реальной реализации будет вызов API с фильтрами
-    // Для демонстрации используем тестовые данные
-    const searchResults = [
-        {
-            track_id: 1,
-            title: 'Bohemian Rhapsody',
-            artist_name: 'Queen',
-            genre_name: 'Рок',
-            bpm: 70,
-            duration_sec: 355,
-            created_at: '2023-05-15 10:30:00'
-        },
-        {
-            track_id: 4,
-            title: 'Another One Bites the Dust',
-            artist_name: 'Queen',
-            genre_name: 'Рок',
-            bpm: 110,
-            duration_sec: 214,
-            created_at: '2023-05-16 11:45:00'
-        }
-    ];
+    const token = localStorage.getItem('auth_token');
     
-    displaySearchResults(searchResults);
+    // Формируем URL с параметрами
+    let url = `${API_BASE_URL}/search/tracks?`;
+    const params = [];
+    if (title) params.push(`title=${encodeURIComponent(title)}`);
+    if (artist) params.push(`artist=${encodeURIComponent(artist)}`);
+    if (genreId) params.push(`genre_id=${encodeURIComponent(genreId)}`);
+    if (bpm) params.push(`bpm=${encodeURIComponent(bpm)}`);
+    if (duration) params.push(`duration=${encodeURIComponent(duration)}`);
+    
+    url += params.join('&');
+    
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        displaySearchResults(data);
+    })
+    .catch(error => {
+        console.error('Ошибка при поиске:', error);
+        showMessage('Ошибка при выполнении поиска', 'error');
+    });
 }
 
 // Отображение результатов поиска
@@ -737,22 +984,141 @@ function resetSearch() {
 
 // Добавление трека в коллекцию
 function addToCollection(trackId) {
-    // В реальной реализации будет вызов API
-    alert(`Трек с ID ${trackId} будет добавлен в коллекцию`);
+    // Показываем модальное окно с выбором коллекции
+    const token = localStorage.getItem('auth_token');
+    
+    // Получаем список коллекций пользователя
+    fetch(`${API_BASE_URL}/collections`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(collections => {
+        const modalBody = document.getElementById('modal-body');
+        modalBody.innerHTML = `
+            <div>
+                <h4>Выберите коллекцию:</h4>
+                ${collections.map(collection => `
+                    <div class="collection-option">
+                        <button class="btn btn-secondary" onclick="addTrackToCollection(${collection.collection_id}, ${trackId})">
+                            ${collection.name}
+                        </button>
+                    </div>
+                `).join('')}
+                <div class="form-group" style="margin-top: 15px;">
+                    <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modal-title').textContent = 'Добавить трек в коллекцию';
+        showModal();
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при загрузке коллекций', 'error');
+    });
+}
+
+// Добавление трека в коллекцию
+function addTrackToCollection(collectionId, trackId) {
+    const token = localStorage.getItem('auth_token');
+    
+    fetch(`${API_BASE_URL}/collections/${collectionId}/tracks`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ track_id: trackId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            closeModal();
+            showMessage('Трек успешно добавлен в коллекцию!', 'success');
+            // Обновляем коллекции, если находимся на соответствующей вкладке
+            if (document.getElementById('collections-section').classList.contains('active')) {
+                loadUserCollections();
+            }
+        } else {
+            showMessage('Ошибка при добавлении трека в коллекцию', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при добавлении трека в коллекцию', 'error');
+    });
 }
 
 // Показать модальное окно добавления трека в коллекцию
 function showAddTrackToCollectionModal(collectionId) {
-    // В реальной реализации будет загрузка доступных треков
-    alert(`Добавление трека в коллекцию с ID: ${collectionId}`);
+    const token = localStorage.getItem('auth_token');
+    
+    // Получаем список треков пользователя
+    fetch(`${API_BASE_URL}/tracks`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(tracks => {
+        const modalBody = document.getElementById('modal-body');
+        modalBody.innerHTML = `
+            <div>
+                <h4>Выберите трек для добавления:</h4>
+                ${tracks.map(track => `
+                    <div class="track-option">
+                        <button class="btn btn-secondary" onclick="addTrackToCollection(${collectionId}, ${track.track_id})" style="margin: 5px 0; display: block; width: 100%;">
+                            ${track.title} - ${track.artist_name}
+                        </button>
+                    </div>
+                `).join('')}
+                <div class="form-group" style="margin-top: 15px;">
+                    <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modal-title').textContent = 'Добавить трек в коллекцию';
+        showModal();
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showMessage('Ошибка при загрузке треков', 'error');
+    });
 }
 
 // Удаление трека из коллекции
 function removeTrackFromCollection(collectionId, trackId) {
     if (confirm('Вы уверены, что хотите удалить этот трек из коллекции?')) {
-        // В реальной реализации будет вызов API
-        console.log(`Удаление трека ${trackId} из коллекции ${collectionId}`);
-        loadUserCollections(); // Обновить список коллекций
+        const token = localStorage.getItem('auth_token');
+        
+        fetch(`${API_BASE_URL}/collections/${collectionId}/tracks/${trackId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                loadUserCollections(); // Обновить список коллекций
+                showMessage('Трек успешно удален из коллекции!', 'success');
+            } else {
+                showMessage('Ошибка при удалении трека из коллекции', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            showMessage('Ошибка при удалении трека из коллекции', 'error');
+        });
     }
 }
 
@@ -766,18 +1132,146 @@ function switchAdminTab(tabName) {
     // Добавить активный класс к нажатой кнопке
     event.target.classList.add('active');
     
-    // В реальной реализации будет загрузка соответствующего контента
+    const token = localStorage.getItem('auth_token');
     const adminContent = document.querySelector('.admin-content');
     
     switch(tabName) {
         case 'users':
-            adminContent.innerHTML = '<h3>Список пользователей</h3><p>Здесь будет отображаться список всех пользователей системы.</p>';
+            fetch(`${API_BASE_URL}/admin/users`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                adminContent.innerHTML = `
+                    <h3>Список пользователей</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Логин</th>
+                                <th>Имя</th>
+                                <th>Фамилия</th>
+                                <th>Email</th>
+                                <th>Админ</th>
+                                <th>Дата создания</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(user => `
+                                <tr>
+                                    <td>${user.user_id}</td>
+                                    <td>${user.login}</td>
+                                    <td>${user.first_name || ''}</td>
+                                    <td>${user.last_name || ''}</td>
+                                    <td>${user.email || ''}</td>
+                                    <td>${user.is_admin ? 'Да' : 'Нет'}</td>
+                                    <td>${user.created_at}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                adminContent.innerHTML = '<h3>Список пользователей</h3><p>Ошибка при загрузке пользователей</p>';
+            });
             break;
         case 'tracks':
-            adminContent.innerHTML = '<h3>Все треки</h3><p>Здесь будет отображаться список всех треков в системе.</p>';
+            fetch(`${API_BASE_URL}/admin/tracks`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                adminContent.innerHTML = `
+                    <h3>Все треки</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Исполнитель</th>
+                                <th>Жанр</th>
+                                <th>BPM</th>
+                                <th>Длительность</th>
+                                <th>Пользователь</th>
+                                <th>Дата создания</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(track => `
+                                <tr>
+                                    <td>${track.track_id}</td>
+                                    <td>${track.title}</td>
+                                    <td>${track.artist_name}</td>
+                                    <td>${track.genre_name}</td>
+                                    <td>${track.bpm || ''}</td>
+                                    <td>${track.duration_sec || ''}</td>
+                                    <td>${track.user_login || track.user_id}</td>
+                                    <td>${track.created_at}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                adminContent.innerHTML = '<h3>Все треки</h3><p>Ошибка при загрузке треков</p>';
+            });
             break;
         case 'audit':
-            adminContent.innerHTML = '<h3>Журнал операций</h3><p>Здесь будет отображаться журнал всех операций в системе.</p>';
+            fetch(`${API_BASE_URL}/admin/audit`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                adminContent.innerHTML = `
+                    <h3>Журнал операций</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Пользователь</th>
+                                <th>Тип операции</th>
+                                <th>Таблица</th>
+                                <th>ID записи</th>
+                                <th>Время</th>
+                                <th>Детали</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(entry => `
+                                <tr>
+                                    <td>${entry.log_id}</td>
+                                    <td>${entry.user_login || entry.user_id}</td>
+                                    <td>${entry.operation_type}</td>
+                                    <td>${entry.table_name}</td>
+                                    <td>${entry.record_id}</td>
+                                    <td>${entry.operation_time}</td>
+                                    <td>${entry.details ? JSON.stringify(entry.details) : ''}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                adminContent.innerHTML = '<h3>Журнал операций</h3><p>Ошибка при загрузке журнала</p>';
+            });
             break;
     }
 }
@@ -797,4 +1291,20 @@ function showModal() {
 // Закрыть модальное окно
 function closeModal() {
     document.getElementById('modal-overlay').style.display = 'none';
+}
+
+// Показать сообщение пользователю
+function showMessage(message, type) {
+    // Создаем элемент сообщения
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message message-${type}`;
+    messageDiv.textContent = message;
+    
+    // Добавляем в начало body
+    document.body.appendChild(messageDiv);
+    
+    // Удаляем через 3 секунды
+    setTimeout(() => {
+        messageDiv.remove();
+    }, 3000);
 }

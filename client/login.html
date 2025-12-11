@@ -78,7 +78,7 @@
             </form>
             
             <div class="register-link">
-                <p>Нет аккаунта? <a href="register.html">Зарегистрироваться</a></p>
+                <p>Нет аккаунта? <a href="register-page">Зарегистрироваться</a></p>
             </div>
         </div>
     </div>
@@ -90,18 +90,32 @@
             const login = document.getElementById('login').value;
             const password = document.getElementById('password').value;
             
-            // В реальной реализации здесь будет вызов API для аутентификации
-            // Для демонстрации простая проверка
-            if(login === 'admin' && password === 'admin') {
-                // Перенаправление на главную страницу как администратор
-                window.location.href = 'index.html';
-            } else if(login === 'user' && password === 'user') {
-                // Перенаправление на главную страницу как обычный пользователь
-                window.location.href = 'index.html';
-            } else {
-                // Показать сообщение об ошибке
+            // Вызов API для аутентификации
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ login: login, password: password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    // Сохраняем токен в localStorage
+                    localStorage.setItem('auth_token', data.token);
+                    // Перенаправляем на главную страницу
+                    window.location.href = 'index.html';
+                } else {
+                    // Показать сообщение об ошибке
+                    document.getElementById('error-message').style.display = 'block';
+                    document.getElementById('error-message').textContent = data.message || 'Неверный логин или пароль';
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при входе:', error);
                 document.getElementById('error-message').style.display = 'block';
-            }
+                document.getElementById('error-message').textContent = 'Ошибка при подключении к серверу';
+            });
         });
     </script>
 </body>
